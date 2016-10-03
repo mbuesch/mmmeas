@@ -516,7 +516,8 @@ error:
 
 int es51984_get_sample(struct es51984 *es,
 		       struct es51984_sample *sample,
-		       int blocking)
+		       int blocking,
+		       int debug)
 {
 	struct es51984_raw_sample *raw;
 	int err;
@@ -531,7 +532,8 @@ int es51984_get_sample(struct es51984 *es,
 	err = read_sample(es, &raw, blocking);
 	if (err)
 		return err;
-	dump_raw_sample("es51984_get_sample", raw);
+	if (debug)
+		dump_raw_sample("es51984 raw sample", raw);
 	err = parse_sample(es, raw, sample);
 	if (err)
 		return err;
@@ -600,7 +602,7 @@ int es51984_discard(struct es51984 *es)
 
 	/* Read samples until the buffer is empty */
 	while (1) {
-		err = es51984_get_sample(es, &sample, 0);
+		err = es51984_get_sample(es, &sample, 0, 0);
 		if (err == -EAGAIN)
 			break; /* No more samples */
 		if (err)

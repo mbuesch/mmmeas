@@ -75,10 +75,12 @@ const char * es51984_get_units(const struct es51984_sample *sample);
  * @es: The interface.
  * @sample: Pointer to the sample buffer.
  * @blocking: If true, block until a sample arrives.
+ * @debug: If true, enable debug messages.
  */
 int es51984_get_sample(struct es51984 *es,
 		       struct es51984_sample *sample,
-		       int blocking);
+		       int blocking,
+		       int debug);
 
 /** es51984_discard - Discard all pending samples
  *

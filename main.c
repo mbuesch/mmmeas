@@ -24,13 +24,64 @@
 #include <getopt.h>
 
 
-static void usage(int argc, char **argv)
+static struct {
+	const char *dev;
+} cmdline;
+
+
+static int dump_es51984(enum es51984_board_type board, const char *dev)
 {
-	printf("Multimeter measurement\n\n");
-	printf("\nUsage: %s [OPTIONS]\n", argv[0]);
-	printf("\n\n"
+	struct es51984 *es = NULL;
+	struct es51984_sample sample;
+	int ret = -ENODEV;
+	int err;
+	const char *units;
+
+	es = es51984_init(board, dev);
+	if (!es)
+		goto out;
+	err = es51984_sync(es);
+	if (err) {
+		fprintf(stderr, "Failed to sync to data stream.\n");
+		goto out;
+	}
+	while (1) {
+		err = es51984_get_sample(es, &sample, 1, 0);
+		if (err) {
+			fprintf(stderr, "ERROR: Failed to read sample.\n");
+			continue;
+		}
+		if (sample.function == ES51984_FUNC_TEMP)
+			units = sample.degree ? "*C" : "F";
+		else
+			units = es51984_get_units(&sample);
+		printf("%.3lf %s%s  (%s, %s, %s)%s\n",
+		       sample.overflow ? 0.0 : sample.value,
+		       sample.overflow ? "OVERFLOW " : "",
+		       units,
+		       sample.dc_mode ? "DC" : "AC",
+		       sample.auto_mode ? "auto" : "man",
+		       sample.hold ? "hold" : "no-hold",
+		       sample.batt_low ? " BATTERY LOW" : "");
+	}
+
+	ret = 0;
+out:
+	es51984_exit(es);
+
+	return ret;
+}
+
+static void usage(void)
+{
+	printf("Multimeter measurement\n\n"
+	       "  Usage: mmmeas [OPTIONS] DEVICE\n"
+	       "\n"
+	       "  DEVICE is the serial device node.\n"
+	       "\n"
+	       "Options:\n"
 	       "  -h|--help            Print this help text\n"
-	       );
+	);
 }
 
 static int parse_args(int argc, char **argv)
@@ -49,11 +100,24 @@ static int parse_args(int argc, char **argv)
 			break;
 		switch (c) {
 		case 'h':
-			usage(argc, argv);
+			usage();
 			return 1;
 		default:
 			return -1;
 		}
+	}
+	if (optind < argc)
+		cmdline.dev = argv[optind++];
+	if (optind < argc) {
+		fprintf(stderr, "ERROR: Too many arguments\n\n");
+		usage();
+		return -1;
+	}
+
+	if (!cmdline.dev) {
+		fprintf(stderr, "ERROR: DEVICE node missing\n\n");
+		usage();
+		return -1;
 	}
 
 	return 0;
@@ -61,8 +125,6 @@ static int parse_args(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-	struct es51984 *es51984 = NULL;
-	struct es51984_sample sample;
 	int ret = 1;
 	int err;
 
@@ -72,25 +134,13 @@ int main(int argc, char **argv)
 	if (err)
 		goto out;
 
-	es51984 = es51984_init(ES51984_BOARD_AMPROBE_35XPA, "/dev/ttyUSB0");
-	if (!es51984)
+	err = dump_es51984(ES51984_BOARD_AMPROBE_35XPA,
+			   cmdline.dev);
+	if (err)
 		goto out;
-	err = es51984_sync(es51984);
-	if (err) {
-		fprintf(stderr, "Failed to sync to data stream.\n");
-		goto out;
-	}
-	while (1) {
-		err = es51984_get_sample(es51984, &sample, 1);
-		if (err) {
-			fprintf(stderr, "Failed to read sample.\n");
-			goto out;
-		}
-	}
 
 	ret = 0;
 out:
-	es51984_exit(es51984);
 
 	return ret;
 }
