@@ -98,13 +98,15 @@ static int dump_es51984(enum es51984_board_type board,
 			fprintf(stderr, "ERROR: Failed to get time.\n");
 			continue;
 		}
-		if (gettimeofday(&tv, NULL)) {
-			fprintf(stderr, "ERROR: gettimeofday() failed.\n");
-			continue;
+		if (sleep_ms > 0) {
+			if (gettimeofday(&tv, NULL)) {
+				fprintf(stderr, "ERROR: gettimeofday() failed.\n");
+				continue;
+			}
+			if (timeval_msec_diff(&tv, &prev_tv) < sleep_ms)
+				continue;
+			prev_tv = tv;
 		}
-		if (timeval_msec_diff(&tv, &prev_tv) < sleep_ms)
-			continue;
-		prev_tv = tv;
 
 		localtime_r(&t, &tm);
 		strftime(tbuf, sizeof(tbuf), "%F;%T", &tm);
@@ -166,8 +168,12 @@ static int parse_args(int argc, char **argv)
 		{ "help", no_argument, NULL, 'h', },
 		{ NULL, },
 	};
-
 	int c, idx;
+
+	cmdline.dev = NULL;
+	cmdline.csv = false;
+	cmdline.timestamp = false;
+	cmdline.sleep = 0.0;
 
 	while (1) {
 		c = getopt_long(argc, argv, "cts:h",
