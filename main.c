@@ -24,19 +24,38 @@
 #include <stdbool.h>
 #include <getopt.h>
 #include <time.h>
+#include <sys/time.h>
+#include <math.h>
 
 
 static struct {
 	const char *dev;
 	bool csv;
 	bool timestamp;
+	double sleep;
 } cmdline;
 
+
+static int timeval_msec_diff(const struct timeval *a, const struct timeval *b)
+{
+	int64_t usec_a, usec_b, usec_diff;
+
+	usec_a = (int64_t)a->tv_sec * 1000000;
+	usec_a += (int64_t)a->tv_usec;
+
+	usec_b = (int64_t)b->tv_sec * 1000000;
+	usec_b += (int64_t)b->tv_usec;
+
+	usec_diff = usec_a - usec_b;
+
+	return usec_diff / 1000;
+}
 
 static int dump_es51984(enum es51984_board_type board,
 			const char *dev,
 			bool csv,
-			bool timestamp)
+			bool timestamp,
+			double sleep)
 {
 	struct es51984 *es = NULL;
 	struct es51984_sample sample;
@@ -47,6 +66,10 @@ static int dump_es51984(enum es51984_board_type board,
 	time_t t;
 	struct tm tm;
 	char tbuf[256];
+	struct timeval tv, prev_tv = { 0 };
+	int sleep_ms;
+
+	sleep_ms = (int)round(sleep * 1000.0);
 
 	es = es51984_init(board, dev);
 	if (!es)
@@ -56,6 +79,13 @@ static int dump_es51984(enum es51984_board_type board,
 		fprintf(stderr, "Failed to sync to data stream.\n");
 		goto out;
 	}
+	/* Discard first sample */
+	err = es51984_get_sample(es, &sample, 1, 0);
+	if (err) {
+		fprintf(stderr, "ERROR: Failed to read sample.\n");
+		goto out;
+	}
+
 	while (1) {
 		err = es51984_get_sample(es, &sample, 1, 0);
 		if (err) {
@@ -68,6 +98,14 @@ static int dump_es51984(enum es51984_board_type board,
 			fprintf(stderr, "ERROR: Failed to get time.\n");
 			continue;
 		}
+		if (gettimeofday(&tv, NULL)) {
+			fprintf(stderr, "ERROR: gettimeofday() failed.\n");
+			continue;
+		}
+		if (timeval_msec_diff(&tv, &prev_tv) < sleep_ms)
+			continue;
+		prev_tv = tv;
+
 		localtime_r(&t, &tm);
 		strftime(tbuf, sizeof(tbuf), "%F;%T", &tm);
 
@@ -114,6 +152,7 @@ static void usage(void)
 	       "Options:\n"
 	       "  -c|--csv             Use CSV output\n"
 	       "  -t|--timestamp       Print time stamps in output\n"
+	       "  -s|--sleep SECONDS   Sleep and discard values between prints\n"
 	       "  -h|--help            Print this help text\n"
 	);
 }
@@ -123,6 +162,7 @@ static int parse_args(int argc, char **argv)
 	static const struct option long_options[] = {
 		{ "csv", no_argument, NULL, 'c', },
 		{ "timestamp", no_argument, NULL, 't', },
+		{ "sleep", required_argument, NULL, 's', },
 		{ "help", no_argument, NULL, 'h', },
 		{ NULL, },
 	};
@@ -130,7 +170,7 @@ static int parse_args(int argc, char **argv)
 	int c, idx;
 
 	while (1) {
-		c = getopt_long(argc, argv, "cth",
+		c = getopt_long(argc, argv, "cts:h",
 				long_options, &idx);
 		if (c == -1)
 			break;
@@ -140,6 +180,12 @@ static int parse_args(int argc, char **argv)
 			break;
 		case 't':
 			cmdline.timestamp = true;
+			break;
+		case 's':
+			if (sscanf(optarg, "%lf", &cmdline.sleep) != 1) {
+				fprintf(stderr, "ERROR: Invalid --sleep value\n");
+				return -1;
+			}
 			break;
 		case 'h':
 			usage();
@@ -179,7 +225,8 @@ int main(int argc, char **argv)
 	err = dump_es51984(ES51984_BOARD_AMPROBE_35XPA,
 			   cmdline.dev,
 			   cmdline.csv,
-			   cmdline.timestamp);
+			   cmdline.timestamp,
+			   cmdline.sleep);
 	if (err)
 		goto out;
 

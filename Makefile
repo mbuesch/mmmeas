@@ -16,7 +16,7 @@ endif
 
 PREFIX		?= /usr/local
 CFLAGS		= -O2 -Wall -std=c99 -D_GNU_SOURCE -pedantic
-LDFLAGS		=
+LDFLAGS		= -lm
 SPARSEFLAGS	= $(CFLAGS) -D__transparent_union__=__unused__ -D_STRING_ARCH_unaligned=1 \
 		  -D__DBL_MAX__=0.0l \
 		  -Wdeclaration-after-statement -Wdo-while -Wptr-subtraction-blows \
