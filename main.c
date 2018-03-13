@@ -1,7 +1,7 @@
 /*
  *   Multimeter measurement
  *
- *   Copyright (C) 2016 Michael Buesch <m@bues.ch>
+ *   Copyright (C) 2016-2018 Michael Buesch <m@bues.ch>
  *
  *   This program is free software; you can redistribute it and/or
  *   modify it under the terms of the GNU General Public License
