@@ -21,21 +21,32 @@
 #include <string.h>
 #include <errno.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <getopt.h>
+#include <time.h>
 
 
 static struct {
 	const char *dev;
+	bool csv;
+	bool timestamp;
 } cmdline;
 
 
-static int dump_es51984(enum es51984_board_type board, const char *dev)
+static int dump_es51984(enum es51984_board_type board,
+			const char *dev,
+			bool csv,
+			bool timestamp)
 {
 	struct es51984 *es = NULL;
 	struct es51984_sample sample;
 	int ret = -ENODEV;
 	int err;
 	const char *units;
+	double value;
+	time_t t;
+	struct tm tm;
+	char tbuf[256];
 
 	es = es51984_init(board, dev);
 	if (!es)
@@ -51,18 +62,39 @@ static int dump_es51984(enum es51984_board_type board, const char *dev)
 			fprintf(stderr, "ERROR: Failed to read sample.\n");
 			continue;
 		}
+
+		t = time(NULL);
+		if (t == ((time_t)-1)) {
+			fprintf(stderr, "ERROR: Failed to get time.\n");
+			continue;
+		}
+		localtime_r(&t, &tm);
+		strftime(tbuf, sizeof(tbuf), "%F;%T", &tm);
+
 		if (sample.function == ES51984_FUNC_TEMP)
 			units = sample.degree ? "*C" : "F";
 		else
 			units = es51984_get_units(&sample);
-		printf("%.3lf %s%s  (%s, %s, %s)%s\n",
-		       sample.overflow ? 0.0 : sample.value,
-		       sample.overflow ? "OVERFLOW " : "",
-		       units,
-		       sample.dc_mode ? "DC" : "AC",
-		       sample.auto_mode ? "auto" : "man",
-		       sample.hold ? "hold" : "no-hold",
-		       sample.batt_low ? " BATTERY LOW" : "");
+		value = sample.overflow ? 0.0 : sample.value;
+		if (csv) {
+			printf("%s%s%lf\n",
+			       timestamp ? tbuf : "",
+			       timestamp ? ";" : "",
+			       value);
+		} else {
+			printf("%s%s%s%.3lf %s%s  (%s, %s, %s)%s\n",
+			       timestamp ? "[" : "",
+			       timestamp ? tbuf : "",
+			       timestamp ? "] " : "",
+			       value,
+			       sample.overflow ? "OVERFLOW " : "",
+			       units,
+			       sample.dc_mode ? "DC" : "AC",
+			       sample.auto_mode ? "auto" : "man",
+			       sample.hold ? "hold" : "no-hold",
+			       sample.batt_low ? " BATTERY LOW" : "");
+		}
+		fflush(stdout);
 	}
 
 	ret = 0;
@@ -80,6 +112,8 @@ static void usage(void)
 	       "  DEVICE is the serial device node.\n"
 	       "\n"
 	       "Options:\n"
+	       "  -c|--csv             Use CSV output\n"
+	       "  -t|--timestamp       Print time stamps in output\n"
 	       "  -h|--help            Print this help text\n"
 	);
 }
@@ -87,6 +121,8 @@ static void usage(void)
 static int parse_args(int argc, char **argv)
 {
 	static const struct option long_options[] = {
+		{ "csv", no_argument, NULL, 'c', },
+		{ "timestamp", no_argument, NULL, 't', },
 		{ "help", no_argument, NULL, 'h', },
 		{ NULL, },
 	};
@@ -94,11 +130,17 @@ static int parse_args(int argc, char **argv)
 	int c, idx;
 
 	while (1) {
-		c = getopt_long(argc, argv, "h",
+		c = getopt_long(argc, argv, "cth",
 				long_options, &idx);
 		if (c == -1)
 			break;
 		switch (c) {
+		case 'c':
+			cmdline.csv = true;
+			break;
+		case 't':
+			cmdline.timestamp = true;
+			break;
 		case 'h':
 			usage();
 			return 1;
@@ -135,7 +177,9 @@ int main(int argc, char **argv)
 		goto out;
 
 	err = dump_es51984(ES51984_BOARD_AMPROBE_35XPA,
-			   cmdline.dev);
+			   cmdline.dev,
+			   cmdline.csv,
+			   cmdline.timestamp);
 	if (err)
 		goto out;
 
