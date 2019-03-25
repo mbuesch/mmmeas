@@ -86,6 +86,10 @@ static int dump_es51984(enum es51984_board_type board,
 		goto out;
 	}
 
+	if (gettimeofday(&prev_tv, NULL)) {
+		fprintf(stderr, "ERROR: gettimeofday() failed.\n");
+		goto out;
+	}
 	while (1) {
 		err = es51984_get_sample(es, &sample, 1, 0);
 		if (err) {
