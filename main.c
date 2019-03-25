@@ -68,6 +68,7 @@ static int dump_es51984(enum es51984_board_type board,
 	char tbuf[256];
 	struct timeval tv, prev_tv = { 0 };
 	int sleep_ms;
+	bool firstrun = true;
 
 	sleep_ms = (int)round(sleep * 1000.0);
 
@@ -107,7 +108,7 @@ static int dump_es51984(enum es51984_board_type board,
 				fprintf(stderr, "ERROR: gettimeofday() failed.\n");
 				continue;
 			}
-			if (timeval_msec_diff(&tv, &prev_tv) < sleep_ms)
+			if ((timeval_msec_diff(&tv, &prev_tv) < sleep_ms) && !firstrun)
 				continue;
 			prev_tv = tv;
 		}
@@ -139,6 +140,7 @@ static int dump_es51984(enum es51984_board_type board,
 			       sample.batt_low ? " BATTERY LOW" : "");
 		}
 		fflush(stdout);
+		firstrun = false;
 	}
 
 	ret = 0;
